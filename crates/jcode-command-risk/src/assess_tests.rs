@@ -104,6 +104,16 @@ fn non_rm_destructive_tools_are_covered() {
 }
 
 #[test]
+fn stderr_suppression_to_dev_null_is_safe() {
+    // Regression: `2>/dev/null` was classified as Catastrophic because the
+    // recursive `/dev` protection caught `/dev/null` before the explicit
+    // null-device exemption ran, hard-blocking routine stderr suppression.
+    assert!(level("cat /home/u/proj/readme.md 2>/dev/null").runs_immediately());
+    assert!(level("grep foo /home/u/proj/file >/dev/null").runs_immediately());
+    assert!(level("make 2>&1").runs_immediately());
+}
+
+#[test]
 fn truncating_redirect_outside_cwd_is_caught() {
     assert!(level("echo '' > /home/u/other/important.conf") >= RiskLevel::Confirm);
 }

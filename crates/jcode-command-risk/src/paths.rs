@@ -202,6 +202,18 @@ pub fn classify_target(
         });
     }
 
+    // Safe write sinks that happen to live under `/dev`: redirecting to the
+    // null device or stdio is routine and never destroys a filesystem. This
+    // must run before the catastrophic check below, which would otherwise catch
+    // `/dev/null` through the recursive `/dev` protection.
+    if expanded.starts_with("/dev/null")
+        || expanded.starts_with("/dev/stdout")
+        || expanded.starts_with("/dev/stderr")
+        || expanded.starts_with("/dev/fd/")
+    {
+        return None;
+    }
+
     // Check the resolved path first: `$HOME` expands to a protected path and
     // must be denied outright, not merely queried. Only genuinely unresolvable
     // substitutions fall through to the Confirm tier below.
