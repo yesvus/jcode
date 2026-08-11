@@ -781,6 +781,46 @@ fn downgrade_policy_removes_every_function_call_part() {
 }
 
 #[test]
+fn neutral_downgrade_keeps_context_but_drops_callable_syntax() {
+    let messages = unsigned_tool_history();
+    let contents = jcode_provider_gemini::build_contents_with_signature_policy(
+        &messages,
+        jcode_provider_gemini::SignaturePolicy::DowngradeToolCallsToNeutralText,
+    );
+    let parts: Vec<_> = contents
+        .iter()
+        .flat_map(|content| content.parts.iter())
+        .collect();
+    assert!(
+        parts
+            .iter()
+            .all(|part| part.function_call.is_none() && part.function_response.is_none()),
+        "neutral downgrade must leave no functionCall/functionResponse part"
+    );
+    let text = parts
+        .iter()
+        .filter_map(|part| part.text.as_deref())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        text.contains("bash"),
+        "tool name should survive for context: {text}"
+    );
+    assert!(
+        text.contains("total 0"),
+        "tool result should survive: {text}"
+    );
+    assert!(
+        !text.contains("bash("),
+        "callable syntax must not survive in neutral form (got: {text})"
+    );
+    assert!(
+        !text.contains("[previous tool call] "),
+        "the callable marker prefix must not survive in neutral form (got: {text})"
+    );
+}
+
+#[test]
 fn missing_thought_signature_errors_are_recognized_from_backend_bodies() {
     // Exact bodies reported in #482 and #518.
     assert!(jcode_provider_gemini::is_missing_thought_signature_error(

@@ -594,34 +594,57 @@ impl Provider for AntigravityProvider {
             // The unsigned-history fallback contains a deliberately distinctive
             // marker. Gemini 3 Flash can imitate it as fresh assistant text,
             // making the session look productive while no tool is dispatched
-            // (#845). Never execute or render that pseudo-call. Retry exactly
-            // once with native function calling forced, then fail clearly.
+            // (#845). Never execute or render an unvalidated pseudo-call, but
+            // recover in layers instead of killing the whole turn:
+            //   1. Convert: the marker is jcode's own downgrade serialization,
+            //      so parse it back into a real tool call and dispatch it
+            //      through the normal tool path. The tool registry validates
+            //      the name and args before execution, so this trusts the model
+            //      no more than a native call does.
+            //   2. Retry once with native function calling forced, and with the
+            //      callable syntax stripped from the history (a neutral marker
+            //      the model cannot imitate), which breaks the imitation loop
+            //      that makes the old retry always fail.
+            //   3. Strip and continue: if the model still emits a pseudo-call,
+            //      drop the marker text, keep any real text, and end the turn
+            //      normally so the agent loop keeps working instead of the
+            //      session deadlocking on every second tool call.
+            let mut skip_pseudo_parts = false;
+            let mut recovered_call: Option<(String, serde_json::Value)> = None;
             if jcode_provider_antigravity::is_pseudo_tool_call_turn(&response) {
-                response = match provider
-                    .generate_content(
-                        &model,
-                        &messages,
-                        &tools,
-                        &system,
-                        resume_session_id.as_deref(),
-                        true,
-                        signature_policy,
-                    )
-                    .await
+                if let Some((name, args)) =
+                    jcode_provider_antigravity::parse_pseudo_tool_call(&response)
                 {
-                    Ok(retried) => retried,
-                    Err(err) => {
-                        let _ = tx.send(Err(err)).await;
-                        return;
+                    if tools.iter().any(|tool| tool.name == name) {
+                        recovered_call = Some((name, args));
+                        skip_pseudo_parts = true;
                     }
-                };
-                if jcode_provider_antigravity::is_pseudo_tool_call_turn(&response) {
-                    let _ = tx
-                        .send(Err(anyhow::anyhow!(
-                            "Antigravity returned a textual pseudo-tool call after a forced native-call retry; start a new turn or choose another model"
-                        )))
-                        .await;
-                    return;
+                }
+                if recovered_call.is_none() {
+                    response = match provider
+                        .generate_content(
+                            &model,
+                            &messages,
+                            &tools,
+                            &system,
+                            resume_session_id.as_deref(),
+                            true,
+                            jcode_provider_gemini::SignaturePolicy::DowngradeToolCallsToNeutralText,
+                        )
+                        .await
+                    {
+                        Ok(retried) => retried,
+                        Err(err) => {
+                            let _ = tx.send(Err(err)).await;
+                            return;
+                        }
+                    };
+                    if jcode_provider_antigravity::is_pseudo_tool_call_turn(&response) {
+                        // Last resort: never fail the turn on an imitated call.
+                        // Strip the marker and continue with whatever real
+                        // output the model produced.
+                        skip_pseudo_parts = true;
+                    }
                 }
             }
             let _ = tx
@@ -663,6 +686,21 @@ impl Provider for AntigravityProvider {
             // answer, so we surface an actionable error below instead.
             let mut produced_output = false;
             if let Some(content) = candidate.content {
+                // A pseudo-call converted into a real call (see the layered
+                // recovery above) is dispatched here, after the Streaming
+                // phase, so event ordering matches the native path.
+                if let Some((name, args)) = recovered_call {
+                    produced_output = true;
+                    let call_id = Uuid::new_v4().to_string();
+                    let _ = tx
+                        .send(Ok(StreamEvent::ToolUseStart {
+                            id: call_id,
+                            name,
+                        }))
+                        .await;
+                    let _ = tx.send(Ok(StreamEvent::ToolInputDelta(args.to_string()))).await;
+                    let _ = tx.send(Ok(StreamEvent::ToolUseEnd)).await;
+                }
                 // Gemini 3 attaches a `thoughtSignature` to function-call parts
                 // (and occasionally to a standalone preceding part). Emit tool
                 // calls through the standard ToolUseStart/End path so jcode
@@ -672,6 +710,10 @@ impl Provider for AntigravityProvider {
                 // Cloud Code backend, which rejects function calls missing it).
                 let mut pending_signature: Option<String> = None;
                 for part in content.parts {
+                    if skip_pseudo_parts && jcode_provider_antigravity::is_pseudo_tool_call_part(&part)
+                    {
+                        continue;
+                    }
                     let part_signature = part
                         .thought_signature
                         .as_ref()

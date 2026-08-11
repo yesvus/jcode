@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use jcode_provider_gemini::CodeAssistGenerateResponse;
+use jcode_provider_gemini::{CodeAssistGenerateResponse, GeminiPart};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -426,23 +426,78 @@ pub fn is_pseudo_tool_call_turn(response: &CodeAssistGenerateResponse) -> bool {
         .and_then(|response| response.candidates.as_ref())
         .and_then(|candidates| candidates.first())
         .and_then(|candidate| candidate.content.as_ref())
-        .is_some_and(|content| {
-            content.parts.iter().any(|part| {
-                let Some(text) = part.text.as_deref() else {
-                    return false;
-                };
-                let Some(call) = text.trim_start().strip_prefix("[previous tool call]") else {
-                    return false;
-                };
-                let call = call.trim_start();
-                let name_len = call
-                    .chars()
-                    .take_while(|ch| ch.is_ascii_alphanumeric() || *ch == '_' || *ch == '-')
-                    .map(char::len_utf8)
-                    .sum::<usize>();
-                name_len > 0 && call[name_len..].trim_start().starts_with('(')
-            })
-        })
+        .is_some_and(|content| content.parts.iter().any(is_pseudo_tool_call_part))
+}
+
+/// Whether a single text part is an imitated `[previous tool call] name(...)`
+/// marker. See [`is_pseudo_tool_call_turn`].
+pub fn is_pseudo_tool_call_part(part: &GeminiPart) -> bool {
+    let Some(text) = part.text.as_deref() else {
+        return false;
+    };
+    let Some(call) = text.trim_start().strip_prefix("[previous tool call]") else {
+        return false;
+    };
+    let call = call.trim_start();
+    let name_len = call
+        .chars()
+        .take_while(|ch| ch.is_ascii_alphanumeric() || *ch == '_' || *ch == '-')
+        .map(char::len_utf8)
+        .sum::<usize>();
+    name_len > 0 && call[name_len..].trim_start().starts_with('(')
+}
+
+/// Parse an imitated `[previous tool call] name(args)` text part back into a
+/// real tool call. The marker is jcode's own downgrade serialization, so the
+/// format is well-defined and parsing it is safe as long as the caller
+/// validates the tool name against the registry before dispatch. Args are
+/// parsed leniently: typographic quotes the model may emit (see #845) are
+/// normalized to ASCII before JSON parsing.
+///
+/// Returns `None` when no part is a parseable pseudo-call, so callers can fall
+/// back to a retry or to stripping the marker instead of executing it.
+pub fn parse_pseudo_tool_call(
+    response: &CodeAssistGenerateResponse,
+) -> Option<(String, Value)> {
+    let content = response
+        .response
+        .as_ref()?
+        .candidates
+        .as_ref()?
+        .first()?
+        .content
+        .as_ref()?;
+    for part in &content.parts {
+        let Some(text) = part.text.as_deref() else {
+            continue;
+        };
+        let Some(call) = text.trim().strip_prefix("[previous tool call]") else {
+            continue;
+        };
+        let call = call.trim_start();
+        let name: String = call
+            .chars()
+            .take_while(|ch| ch.is_ascii_alphanumeric() || *ch == '_' || *ch == '-')
+            .collect();
+        if name.is_empty() {
+            continue;
+        }
+        let Some(args_text) = call[name.len()..].trim_start().strip_prefix('(') else {
+            continue;
+        };
+        let Some((args_text, _)) = args_text.rsplit_once(')') else {
+            continue;
+        };
+        // The model may echo typographic quotes instead of ASCII ones.
+        let normalized = args_text
+            .replace('\u{201c}', "\"")
+            .replace('\u{201d}', "\"")
+            .replace('\u{2018}', "'")
+            .replace('\u{2019}', "'");
+        let args: Value = serde_json::from_str(normalized.trim()).ok()?;
+        return Some((name, args));
+    }
+    None
 }
 
 /// Remap model ids that the Antigravity catalog advertises but the

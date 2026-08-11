@@ -671,6 +671,84 @@ fn pseudo_tool_call_turn_only_matches_the_recovery_marker_as_a_call() {
     ));
 }
 
+#[test]
+fn parse_pseudo_tool_call_recovers_the_intended_call_from_the_marker() {
+    let response = |text: &str| {
+        serde_json::from_value::<CodeAssistGenerateResponse>(serde_json::json!({
+            "response": {
+                "candidates": [{
+                    "content": {"parts": [{"text": text}]},
+                    "finishReason": "STOP"
+                }]
+            }
+        }))
+        .expect("decode response")
+    };
+
+    let (name, args) = jcode_provider_antigravity::parse_pseudo_tool_call(&response(
+        "[previous tool call] bash({\"cmd\": \"git status\"})",
+    ))
+    .expect("valid pseudo-call must parse");
+    assert_eq!(name, "bash");
+    assert_eq!(args, serde_json::json!({"cmd": "git status"}));
+
+    // The model may echo typographic quotes instead of ASCII ones (#845).
+    let (name, args) = jcode_provider_antigravity::parse_pseudo_tool_call(&response(
+        "[previous tool call] todo({\u{201c}todos\u{201d}: [\u{201c}a\u{201d}, \u{201c}b\u{201d}]})",
+    ))
+    .expect("typographic quotes must be normalized before parsing");
+    assert_eq!(name, "todo");
+    assert_eq!(args, serde_json::json!({"todos": ["a", "b"]}));
+
+    // Leading whitespace and trailing prose around the marker are tolerated.
+    let (name, _) = jcode_provider_antigravity::parse_pseudo_tool_call(&response(
+        "  [previous tool call] bash({\"cmd\":\"ls\"}) and then verify",
+    ))
+    .expect("trailing prose must not break parsing");
+    assert_eq!(name, "bash");
+}
+
+#[test]
+fn parse_pseudo_tool_call_rejects_non_callable_or_malformed_text() {
+    let response = |text: &str| {
+        serde_json::from_value::<CodeAssistGenerateResponse>(serde_json::json!({
+            "response": {
+                "candidates": [{
+                    "content": {"parts": [{"text": text}]},
+                    "finishReason": "STOP"
+                }]
+            }
+        }))
+        .expect("decode response")
+    };
+
+    assert!(
+        jcode_provider_antigravity::parse_pseudo_tool_call(&response(
+            "[previous tool call] was only a history marker"
+        ))
+        .is_none(),
+        "no parenthesized args means no call to recover"
+    );
+    assert!(
+        jcode_provider_antigravity::parse_pseudo_tool_call(&response(
+            "[previous tool call] bash()"
+        ))
+        .is_none(),
+        "empty args are not valid JSON"
+    );
+    assert!(
+        jcode_provider_antigravity::parse_pseudo_tool_call(&response(
+            "[previous tool call] bash({\"cmd\": )"
+        ))
+        .is_none(),
+        "malformed JSON must not be recovered"
+    );
+    assert!(
+        jcode_provider_antigravity::parse_pseudo_tool_call(&response("ordinary answer")).is_none(),
+        "ordinary text is not a pseudo-call"
+    );
+}
+
 /// End-to-end guard for the turn-2 HTTP 404: `--provider antigravity` gives the
 /// agent this runtime directly, and session restore calls `set_model` with the
 /// routing spec `antigravity:<model>`. The id we store is the id we put on the

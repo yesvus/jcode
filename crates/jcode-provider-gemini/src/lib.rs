@@ -268,6 +268,15 @@ pub enum SignaturePolicy {
     /// structured form but keeps the conversation's *content*, turning a hard
     /// dead-end into a turn that completes.
     DowngradeToolCallsToText,
+    /// Retry variant of [`DowngradeToolCallsToText`] for a follow-up request in
+    /// the same turn. The plain-text form still contains callable syntax
+    /// (`[previous tool call] name(args)`), which Gemini-3 models imitate as a
+    /// fresh assistant response instead of emitting a native function call
+    /// (#845). This variant keeps the tool name and result content but strips
+    /// the callable-looking `name(...)` syntax so there is nothing left for the
+    /// model to imitate; combined with forced function-calling mode `ANY`, the
+    /// model must emit a real functionCall.
+    DowngradeToolCallsToNeutralText,
 }
 
 /// Whether a provider error body is the Cloud Code / Antigravity backend
@@ -326,15 +335,30 @@ pub fn build_contents_with_signature_policy(
                         input,
                         thought_signature,
                     } => {
-                        if policy == SignaturePolicy::DowngradeToolCallsToText {
+                        if matches!(
+                            policy,
+                            SignaturePolicy::DowngradeToolCallsToText
+                                | SignaturePolicy::DowngradeToolCallsToNeutralText
+                        ) {
                             // The backend rejected this history's function-call
                             // parts. Preserve the call as readable text so the
                             // model keeps its context instead of 400ing forever.
-                            parts.push(GeminiPart {
-                                text: Some(format!(
+                            // The neutral variant drops the callable `name(...)`
+                            // syntax so Gemini-3 cannot imitate the marker as a
+                            // fresh tool call (#845); the tool name still
+                            // survives for context.
+                            let text = if policy
+                                == SignaturePolicy::DowngradeToolCallsToNeutralText
+                            {
+                                format!("[previous tool call: {name}]")
+                            } else {
+                                format!(
                                     "[previous tool call] {name}({})",
                                     ToolCall::input_as_object(input)
-                                )),
+                                )
+                            };
+                            parts.push(GeminiPart {
+                                text: Some(text),
                                 ..Default::default()
                             });
                             continue;
@@ -362,7 +386,11 @@ pub fn build_contents_with_signature_policy(
                         content,
                         is_error,
                     } => {
-                        if policy == SignaturePolicy::DowngradeToolCallsToText {
+                        if matches!(
+                            policy,
+                            SignaturePolicy::DowngradeToolCallsToText
+                                | SignaturePolicy::DowngradeToolCallsToNeutralText
+                        ) {
                             // A `functionResponse` with no matching signed
                             // `functionCall` is also rejected, so downgrade it too.
                             let label = if is_error.unwrap_or(false) {
