@@ -12,8 +12,8 @@ use jcode_provider_antigravity::{
     AVAILABLE_MODELS, CatalogModel, CatalogSnapshot, DEFAULT_FALLBACK_MODEL,
     GENERATE_CONTENT_API_URL, PersistedCatalog, X_GOOG_API_CLIENT, antigravity_compatible_schema,
     antigravity_user_agent, catalog_is_stale, catalog_model_detail, client_metadata_header,
-    is_agent_model_id, is_retryable_empty_turn, merge_antigravity_model_ids,
-    remap_unsupported_model,
+    gemini_flash_thinking_level, is_agent_model_id, is_retryable_empty_turn,
+    merge_antigravity_model_ids, remap_unsupported_model,
 };
 #[cfg(test)]
 use jcode_provider_antigravity::{
@@ -314,6 +314,7 @@ impl AntigravityProvider {
                 project_id
             }
         };
+        let thinking_level = gemini_flash_thinking_level(model);
         let resolved_model = self.resolve_model_for_request(model);
         let tools_is_empty = tools.is_empty();
         let mut tools = jcode_provider_gemini::build_tools(tools);
@@ -362,6 +363,13 @@ impl AntigravityProvider {
                 session_id: resume_session_id
                     .filter(|value| !value.trim().is_empty())
                     .map(str::to_string),
+                generation_config: thinking_level.map(|thinking_level| {
+                    jcode_provider_gemini::GeminiGenerationConfig {
+                        thinking_config: Some(jcode_provider_gemini::GeminiThinkingConfig {
+                            thinking_level,
+                        }),
+                    }
+                }),
             },
         };
 

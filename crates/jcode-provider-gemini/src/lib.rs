@@ -150,6 +150,21 @@ pub struct VertexGenerateContentRequest {
     pub tool_config: Option<GeminiToolConfig>,
     #[serde(rename = "session_id", skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
+    #[serde(rename = "generationConfig", skip_serializing_if = "Option::is_none")]
+    pub generation_config: Option<GeminiGenerationConfig>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GeminiGenerationConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking_config: Option<GeminiThinkingConfig>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GeminiThinkingConfig {
+    pub thinking_level: &'static str,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -691,6 +706,27 @@ pub fn choose_onboard_tier(res: &LoadCodeAssistResponse) -> GeminiUserTier {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn thinking_level_serializes_in_generation_config() {
+        let request = VertexGenerateContentRequest {
+            contents: Vec::new(),
+            system_instruction: None,
+            tools: None,
+            tool_config: None,
+            session_id: None,
+            generation_config: Some(GeminiGenerationConfig {
+                thinking_config: Some(GeminiThinkingConfig {
+                    thinking_level: "HIGH",
+                }),
+            }),
+        };
+        let value = serde_json::to_value(request).expect("serialize request");
+        assert_eq!(
+            value["generationConfig"]["thinkingConfig"]["thinkingLevel"],
+            "HIGH"
+        );
+    }
 
     #[test]
     fn compatible_schema_strips_nested_property_names() {

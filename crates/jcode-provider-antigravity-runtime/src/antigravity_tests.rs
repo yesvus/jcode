@@ -61,6 +61,29 @@ fn agent_model_id_filter_rejects_tab_and_completion_ids() {
 }
 
 #[test]
+fn flash_tier_aliases_use_tiered_backend_models_and_levels() {
+    for (alias, backend, level) in [
+        ("gemini-3.8-flash-high", "gemini-3.8-flash-tiered", "HIGH"),
+        (
+            "gemini-3.8-flash-medium",
+            "gemini-3.8-flash-tiered",
+            "MEDIUM",
+        ),
+        ("gemini-3.8-flash-low", "gemini-3.8-flash-tiered", "LOW"),
+        ("gemini-3.7-flash-high", "gemini-3.7-flash-tiered", "HIGH"),
+        (
+            "gemini-3.7-flash-medium",
+            "gemini-3.7-flash-tiered",
+            "MEDIUM",
+        ),
+        ("gemini-3.7-flash-low", "gemini-3.7-flash-tiered", "LOW"),
+    ] {
+        assert_eq!(remap_unsupported_model(alias), backend);
+        assert_eq!(gemini_flash_thinking_level(alias), Some(level));
+    }
+}
+
+#[test]
 fn client_metadata_uses_backend_accepted_platform() {
     assert_eq!(metadata_platform(), "PLATFORM_UNSPECIFIED");
     assert!(client_metadata_header().contains("\"platform\":\"PLATFORM_UNSPECIFIED\""));

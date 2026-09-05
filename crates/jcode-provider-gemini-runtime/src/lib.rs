@@ -581,6 +581,7 @@ impl GeminiProvider {
                         .unwrap_or(&state.session_id)
                         .to_string(),
                 ),
+                generation_config: None,
             },
         };
 

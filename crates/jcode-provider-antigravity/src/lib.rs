@@ -12,11 +12,15 @@ pub const AVAILABLE_MODELS: &[&str] = &[
     "gemini-3.8-flash-high",
     "gemini-3.8-flash-medium",
     "gemini-3.8-flash-low",
+    "gemini-3.7-flash-high",
+    "gemini-3.7-flash-medium",
+    "gemini-3.7-flash-low",
     "gemini-3.6-flash-high",
     "gemini-3.6-flash-medium",
     "gemini-3.6-flash-low",
-    "gemini-pro-agent",
+    "gemini-3.1-pro-high",
     "gemini-3.1-pro-low",
+    "gemini-pro-agent",
     "claude-sonnet-4-6",
     "claude-opus-4-6-thinking",
     "gpt-oss-120b-medium",
@@ -522,8 +526,29 @@ pub fn is_pseudo_tool_call_turn(response: &CodeAssistGenerateResponse) -> bool {
 /// the same requests, so it is the working route to the High Pro model. Map the
 /// broken id onto it so users who pick "Gemini 3.1 Pro (High)" get a working
 /// model instead of a hard 400.
+/// Return the thinking level for a public Gemini Flash tier alias.
+///
+/// Antigravity exposes these aliases in its CLI, but the consumer generate
+/// endpoint routes all three through the single `gemini-3.8-flash-tiered`
+/// backend model. The level belongs in `generationConfig.thinkingConfig`, not
+/// in the backend model id.
+pub fn gemini_flash_thinking_level(model: &str) -> Option<&'static str> {
+    match model.trim() {
+        "gemini-3.8-flash-high" | "gemini-3.7-flash-high" => Some("HIGH"),
+        "gemini-3.8-flash-medium" | "gemini-3.7-flash-medium" => Some("MEDIUM"),
+        "gemini-3.8-flash-low" | "gemini-3.7-flash-low" => Some("LOW"),
+        _ => None,
+    }
+}
+
 pub fn remap_unsupported_model(model: &str) -> &str {
-    match model {
+    match model.trim() {
+        "gemini-3.8-flash-high" | "gemini-3.8-flash-medium" | "gemini-3.8-flash-low" => {
+            "gemini-3.8-flash-tiered"
+        }
+        "gemini-3.7-flash-high" | "gemini-3.7-flash-medium" | "gemini-3.7-flash-low" => {
+            "gemini-3.7-flash-tiered"
+        }
         "gemini-3.1-pro-high" => "gemini-pro-agent",
         other => other,
     }
