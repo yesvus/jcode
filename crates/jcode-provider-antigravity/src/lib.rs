@@ -7,15 +7,15 @@ use std::collections::{HashMap, HashSet};
 /// Known-good model id used when the backend default is unknown. The literal
 /// alias `"default"` is rejected by `generateContent` with HTTP 404, so we must
 /// always resolve it to a real model id before issuing a request.
-pub const DEFAULT_FALLBACK_MODEL: &str = "gemini-3-flash-agent";
+pub const DEFAULT_FALLBACK_MODEL: &str = "gemini-3.6-flash-high";
 pub const AVAILABLE_MODELS: &[&str] = &[
-    "claude-opus-4-6-thinking",
-    "claude-sonnet-4-6",
-    "gemini-3.1-pro-high",
+    "gemini-3.6-flash-high",
+    "gemini-3.6-flash-medium",
+    "gemini-3.6-flash-low",
+    "gemini-pro-agent",
     "gemini-3.1-pro-low",
-    "gemini-3-flash",
-    "gemini-3-flash-agent",
-    "gemini-3.5-flash-low",
+    "claude-sonnet-4-6",
+    "claude-opus-4-6-thinking",
     "gpt-oss-120b-medium",
 ];
 /// The current Antigravity consumer backend. The production host returns
