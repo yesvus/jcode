@@ -805,6 +805,11 @@ impl Provider for AntigravityProvider {
                 .into_iter()
                 .filter(|model| is_agent_model_id(&model.id))
                 .map(|model| model.id)
+                // Keep the picker useful when the backend catalog lags a
+                // newly released model. The live agentModelSorts entries
+                // above still provide every generation model the backend
+                // advertises dynamically.
+                .chain(AVAILABLE_MODELS.iter().map(|model| (*model).to_string()))
                 .chain(std::iter::once(self.model()).filter(|model| is_agent_model_id(model))),
         )
     }
@@ -816,7 +821,7 @@ impl Provider for AntigravityProvider {
     fn model_routes(&self) -> Vec<jcode_provider_core::ModelRoute> {
         let catalog = self.fetched_catalog();
         if !catalog.is_empty() {
-            return catalog
+            let mut routes: Vec<jcode_provider_core::ModelRoute> = catalog
                 .into_iter()
                 .filter(|model| is_agent_model_id(&model.id))
                 .map(|model| jcode_provider_core::ModelRoute {
@@ -828,6 +833,19 @@ impl Provider for AntigravityProvider {
                     cheapness: None,
                 })
                 .collect();
+            for model in AVAILABLE_MODELS {
+                if !routes.iter().any(|route| route.model == *model) {
+                    routes.push(jcode_provider_core::ModelRoute {
+                        model: (*model).to_string(),
+                        provider: "Antigravity".to_string(),
+                        api_method: "https".to_string(),
+                        available: true,
+                        detail: "known agent model".to_string(),
+                        cheapness: None,
+                    });
+                }
+            }
+            return routes;
         }
 
         self.available_models_display()
