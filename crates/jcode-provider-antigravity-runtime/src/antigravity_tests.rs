@@ -103,6 +103,9 @@ fn available_models_display_includes_dynamic_cache_and_current_override() {
 
     assert!(models.contains(&"claude-opus-4-6-thinking".to_string()));
     assert!(models.contains(&"gemini-3-pro-high".to_string()));
+    assert!(models.contains(&"gemini-3.8-flash-high".to_string()));
+    assert!(models.contains(&"gemini-3.8-flash-medium".to_string()));
+    assert!(models.contains(&"gemini-3.8-flash-low".to_string()));
     assert!(models.contains(&"custom-antigravity-model".to_string()));
 }
 
