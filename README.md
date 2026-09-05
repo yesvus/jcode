@@ -30,7 +30,7 @@ The most intelligent harness
 
 ycode is the `yesvus/jcode` fork of [jcode](https://github.com/1jehuang/jcode). It keeps
 jcode's lightweight Rust architecture while providing a focused development track for
-Antigravity compatibility, terminal ergonomics, and CPU/resource profiling.
+Antigravity compatibility and terminal ergonomics.
 
 - The canonical development checkout is maintained on the `ghoul` build host.
 - The local `ycode` executable is a reproducible release build produced from that checkout.

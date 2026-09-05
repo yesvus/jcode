@@ -9,6 +9,9 @@ use std::collections::{HashMap, HashSet};
 /// always resolve it to a real model id before issuing a request.
 pub const DEFAULT_FALLBACK_MODEL: &str = "gemini-3.6-flash-high";
 pub const AVAILABLE_MODELS: &[&str] = &[
+    "gemini-3.8-flash-high",
+    "gemini-3.8-flash-medium",
+    "gemini-3.8-flash-low",
     "gemini-3.6-flash-high",
     "gemini-3.6-flash-medium",
     "gemini-3.6-flash-low",
