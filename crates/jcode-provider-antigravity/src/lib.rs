@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 /// Known-good model id used when the backend default is unknown. The literal
 /// alias `"default"` is rejected by `generateContent` with HTTP 404, so we must
 /// always resolve it to a real model id before issuing a request.
-pub const DEFAULT_FALLBACK_MODEL: &str = "gemini-3-flash";
+pub const DEFAULT_FALLBACK_MODEL: &str = "gemini-3-flash-agent";
 pub const AVAILABLE_MODELS: &[&str] = &[
     "claude-opus-4-6-thinking",
     "claude-sonnet-4-6",
@@ -18,10 +18,13 @@ pub const AVAILABLE_MODELS: &[&str] = &[
     "gemini-3.5-flash-low",
     "gpt-oss-120b-medium",
 ];
+/// The current Antigravity consumer backend. The production host returns
+/// quota exhaustion for consumer OAuth sessions, while the daily sandbox host
+/// is the endpoint used by the official `agy` client.
 pub const FETCH_MODELS_API_URL: &str =
-    "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels";
+    "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:fetchAvailableModels";
 pub const GENERATE_CONTENT_API_URL: &str =
-    "https://cloudcode-pa.googleapis.com/v1internal:generateContent";
+    "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:generateContent";
 const VERSION_ENV: &str = "JCODE_ANTIGRAVITY_VERSION";
 pub const ANTIGRAVITY_VERSION: &str = "1.18.3";
 pub const X_GOOG_API_CLIENT: &str = "google-cloud-sdk vscode_cloudshelleditor/0.1";
@@ -75,8 +78,24 @@ pub struct FetchAvailableModelsResponse {
     models: HashMap<String, FetchAvailableModelEntry>,
     #[serde(default)]
     default_agent_model_id: Option<String>,
+    /// Models that the backend permits for agent `generateContent` calls.
+    /// Other catalog lists include tab/completion and command-only models.
     #[serde(default)]
-    command_model_ids: Vec<String>,
+    agent_model_sorts: Vec<AgentModelSort>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentModelSort {
+    #[serde(default)]
+    groups: Vec<AgentModelGroup>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentModelGroup {
+    #[serde(default)]
+    model_ids: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -180,6 +199,55 @@ pub fn is_known_model(model: &str) -> bool {
     !normalized.is_empty() && AVAILABLE_MODELS.contains(&normalized)
 }
 
+/// Return the model ids advertised for the agent surface.
+///
+/// `fetchAvailableModels` is a multiplexed catalog. `models` contains tab,
+/// command, image, and completion ids in addition to chat-capable agent ids.
+/// Sending a tab id such as `chat_23310` to `generateContent` produces the
+/// opaque `INVALID_ARGUMENT` response observed in the field.
+fn advertised_agent_model_ids(response: &FetchAvailableModelsResponse) -> HashSet<String> {
+    let mut ids = HashSet::new();
+    for sort in &response.agent_model_sorts {
+        for group in &sort.groups {
+            ids.extend(
+                group
+                    .model_ids
+                    .iter()
+                    .map(|id| id.trim().to_string())
+                    .filter(|id| !id.is_empty()),
+            );
+        }
+    }
+    if ids.is_empty() {
+        // Older backends did not return agentModelSorts. Keep the static
+        // allowlist as a conservative compatibility fallback rather than
+        // re-exposing known tab/completion models.
+        ids.extend(
+            response
+                .models
+                .keys()
+                .filter(|id| AVAILABLE_MODELS.contains(&id.as_str()))
+                .cloned(),
+        );
+    }
+    if let Some(default) = response.default_agent_model_id.as_deref() {
+        let default = default.trim();
+        if !default.is_empty() {
+            ids.insert(default.to_string());
+        }
+    }
+    ids
+}
+
+/// Whether a catalog id belongs to the agent generation surface.
+///
+/// This also protects users with a pre-existing cache created before the
+/// `agentModelSorts` filter was added.
+pub fn is_agent_model_id(model: &str) -> bool {
+    let model = model.trim();
+    !model.is_empty() && !model.starts_with("chat_") && !model.starts_with("tab_")
+}
+
 pub fn parse_fetch_available_models_response(
     response: &FetchAvailableModelsResponse,
 ) -> CatalogSnapshot {
@@ -190,25 +258,16 @@ pub fn parse_fetch_available_models_response(
         .filter(|id| !id.is_empty())
         .map(str::to_string);
 
-    let mut preferred_ids = Vec::new();
-    if let Some(default_agent_model_id) = response.default_agent_model_id.as_deref() {
-        preferred_ids.push(default_agent_model_id.trim().to_string());
-    }
-    preferred_ids.extend(
-        response
-            .command_model_ids
-            .iter()
-            .map(|id| id.trim().to_string())
-            .filter(|id| !id.is_empty()),
-    );
-    preferred_ids.extend(response.models.keys().map(|id| id.trim().to_string()));
+    let agent_model_ids = advertised_agent_model_ids(response);
+    let mut preferred_ids: Vec<String> = agent_model_ids.iter().cloned().collect();
+    preferred_ids.sort();
 
     let ordered_ids = merge_antigravity_model_ids(preferred_ids);
     let mut by_id: HashMap<String, CatalogModel> = HashMap::new();
 
     for (model_id, entry) in &response.models {
         let id = model_id.trim();
-        if id.is_empty() {
+        if id.is_empty() || !agent_model_ids.contains(id) || !is_agent_model_id(id) {
             continue;
         }
         let available = entry

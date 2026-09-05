@@ -27,8 +27,10 @@ const ANTIGRAVITY_SCOPES: &[&str] = &[
     "https://www.googleapis.com/auth/experimentsandconfigs",
 ];
 const LOAD_ENDPOINTS: &[&str] = &[
-    "https://cloudcode-pa.googleapis.com",
+    // Match the official agy consumer client. The production host currently
+    // returns RESOURCE_EXHAUSTED for consumer OAuth sessions.
     "https://daily-cloudcode-pa.sandbox.googleapis.com",
+    "https://cloudcode-pa.googleapis.com",
     "https://autopush-cloudcode-pa.sandbox.googleapis.com",
 ];
 const GOOGLE_OAUTH_USER_AGENT: &str = "google-api-nodejs-client/9.15.1";

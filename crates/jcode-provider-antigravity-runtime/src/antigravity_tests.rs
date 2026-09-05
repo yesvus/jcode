@@ -11,6 +11,9 @@ fn parse_fetch_available_models_response_discovers_metadata_and_priority_order()
     let response: FetchAvailableModelsResponse = serde_json::from_value(serde_json::json!({
         "defaultAgentModelId": "gemini-3.1-pro-high",
         "commandModelIds": ["gemini-3-flash"],
+        "agentModelSorts": [{ "groups": [{
+            "modelIds": ["claude-opus-4-6-thinking", "gemini-3.1-pro-high", "gpt-oss-120b-medium"]
+        }] }],
         "models": {
             "claude-opus-4-6-thinking": {
                 "displayName": "Claude Opus 4.6 (Thinking)",
@@ -26,6 +29,7 @@ fn parse_fetch_available_models_response_discovers_metadata_and_priority_order()
                 "displayName": "Gemini 3 Flash",
                 "quotaInfo": { "remainingFraction": 0, "resetTime": "2026-04-24T21:53:26Z" }
             },
+            "chat_23310": { "displayName": "Tab completion" },
             "gpt-oss-120b-medium": {}
         }
     }))
@@ -45,12 +49,15 @@ fn parse_fetch_available_models_response_discovers_metadata_and_priority_order()
         Some("Claude Opus 4.6 (Thinking)")
     );
     assert_eq!(parsed[1].remaining_fraction_milli, Some(250));
-    let flash = parsed
-        .iter()
-        .find(|model| model.id == "gemini-3-flash")
-        .expect("gemini flash model");
-    assert!(!flash.available);
-    assert_eq!(flash.remaining_fraction_milli, Some(0));
+    assert!(!parsed.iter().any(|model| model.id == "gemini-3-flash"));
+    assert!(!parsed.iter().any(|model| model.id == "chat_23310"));
+}
+
+#[test]
+fn agent_model_id_filter_rejects_tab_and_completion_ids() {
+    assert!(is_agent_model_id("gemini-3.6-flash-high"));
+    assert!(!is_agent_model_id("chat_23310"));
+    assert!(!is_agent_model_id("tab_flash_lite_preview"));
 }
 
 #[test]

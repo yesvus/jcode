@@ -12,7 +12,8 @@ use jcode_provider_antigravity::{
     AVAILABLE_MODELS, CatalogModel, CatalogSnapshot, DEFAULT_FALLBACK_MODEL,
     GENERATE_CONTENT_API_URL, PersistedCatalog, X_GOOG_API_CLIENT, antigravity_compatible_schema,
     antigravity_user_agent, catalog_is_stale, catalog_model_detail, client_metadata_header,
-    is_retryable_empty_turn, merge_antigravity_model_ids, remap_unsupported_model,
+    is_agent_model_id, is_retryable_empty_turn, merge_antigravity_model_ids,
+    remap_unsupported_model,
 };
 #[cfg(test)]
 use jcode_provider_antigravity::{
@@ -802,8 +803,9 @@ impl Provider for AntigravityProvider {
         merge_antigravity_model_ids(
             catalog
                 .into_iter()
+                .filter(|model| is_agent_model_id(&model.id))
                 .map(|model| model.id)
-                .chain(std::iter::once(self.model())),
+                .chain(std::iter::once(self.model()).filter(|model| is_agent_model_id(model))),
         )
     }
 
@@ -816,6 +818,7 @@ impl Provider for AntigravityProvider {
         if !catalog.is_empty() {
             return catalog
                 .into_iter()
+                .filter(|model| is_agent_model_id(&model.id))
                 .map(|model| jcode_provider_core::ModelRoute {
                     model: model.id.clone(),
                     provider: "Antigravity".to_string(),

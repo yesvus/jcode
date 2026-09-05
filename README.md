@@ -1,6 +1,6 @@
 <div align="center">
 
-# jcode
+# ycode
 
 [![Latest Release](https://badgen.net/github/release/1jehuang/jcode?icon=github)](https://github.com/1jehuang/jcode/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
@@ -23,6 +23,20 @@ The most intelligent harness
 [Website](https://jcode.sh) · [Docs](https://jcode.sh/docs) · [SDK](https://jcode.sh/sdk) · [Benchmarks](https://jcode.sh/bench) · [Features](#features) · [Install](#installation) · [Quick Start](#quick-start) · [Further Reading](#further-reading) · [Contributing](CONTRIBUTING.md)
 
 </div>
+
+---
+
+## About ycode
+
+ycode is the `yesvus/jcode` fork of [jcode](https://github.com/1jehuang/jcode). It keeps
+jcode's lightweight Rust architecture while providing a focused development track for
+Antigravity compatibility, terminal ergonomics, and CPU/resource profiling.
+
+- The canonical development checkout is maintained on the `ghoul` build host.
+- The local `ycode` executable is a reproducible release build produced from that checkout.
+- ycode preserves the upstream MIT license and copyright notice.
+- Antigravity requests mirror the official `agy` consumer endpoint and only offer models
+  advertised for the agent generation surface, not tab/completion-only model IDs.
 
 ---
 

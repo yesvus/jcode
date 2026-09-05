@@ -85,7 +85,13 @@ async fn fetch_available_models_with_project(
             X_GOOG_API_CLIENT,
         )
         .header(
-            reqwest::header::HeaderName::from_static("client-metadata"),
+            reqwest::header::HeaderName::from_static("x-goog-request-params"),
+            project_id
+                .map(|id| format!("project={id}"))
+                .unwrap_or_default(),
+        )
+        .header(
+            reqwest::header::HeaderName::from_static("x-goog-client-metadata"),
             client_metadata_header(),
         )
         .json(&request)

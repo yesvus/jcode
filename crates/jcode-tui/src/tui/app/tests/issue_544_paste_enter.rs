@@ -57,6 +57,21 @@ fn trailing_backslash_enter_inserts_newline_instead_of_submitting() {
 }
 
 #[test]
+fn literal_lf_from_alacritty_shift_enter_inserts_newline() {
+    let mut app = create_test_app();
+    app.set_input_for_test("first");
+    app.cursor_pos = app.input.len();
+
+    // Alacritty's explicit Shift+Return binding sends LF. Crossterm reports
+    // that as Char('\n'), rather than Enter + SHIFT.
+    app.handle_key(KeyCode::Char('\n'), KeyModifiers::empty())
+        .expect("literal LF should be handled");
+
+    assert_eq!(app.input, "first\n");
+    assert!(app.display_messages().is_empty());
+}
+
+#[test]
 fn plain_enter_still_submits_without_a_trailing_backslash() {
     let mut app = create_test_app();
     app.set_input_for_test("first");

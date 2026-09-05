@@ -26,6 +26,12 @@ pub(in crate::tui::app) fn enter_inserts_newline(
     code: KeyCode,
     modifiers: KeyModifiers,
 ) -> bool {
+    if code == KeyCode::Char('\n')
+        && !modifiers.intersects(KeyModifiers::ALT | KeyModifiers::META | KeyModifiers::SUPER)
+    {
+        insert_input_text(app, "\n");
+        return true;
+    }
     if code != KeyCode::Enter {
         return false;
     }
