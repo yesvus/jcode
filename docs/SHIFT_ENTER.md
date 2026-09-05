@@ -26,6 +26,23 @@ Three situations still break, and jcode handles each explicitly:
 | tmux does not forward extended keys | Write `extended-keys` settings to `~/.tmux.conf` | `/terminal-setup` applies |
 | WezTerm needs an opt-in flag | Set `enable_kitty_keyboard = true` | `/terminal-setup` applies |
 
+## Alacritty 0.17
+
+Alacritty's current key names follow winit's `NamedKey` names, so the binding
+for the main Return key must use `key = "Enter"`, not `key = "Return"`. If
+Shift+Enter is still arriving as a normal submit, add this to
+`~/.config/alacritty/alacritty.toml`, then open a new Alacritty window:
+
+```toml
+[[keyboard.bindings]]
+key = "Enter"
+mods = "Shift"
+chars = "\u001b[13;2u"
+```
+
+The sequence is decoded by crossterm as `Enter + Shift` when ycode's Kitty
+keyboard enhancement is active.
+
 ## `/terminal-setup`
 
 Run it when Shift+Enter submits instead of inserting a newline. It queries the
